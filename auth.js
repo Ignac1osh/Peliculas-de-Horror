@@ -1,6 +1,8 @@
 import jwt from 'jsonwebtoken';
+import dotenv from 'dotenv';
+dotenv.config();
 
-const SECRET = 'clave_secreta_123';
+const SECRET = process.env.JWT_SECRET || 'clave_secreta_123';
 
 const usuarios = [
   { id: 1, usuario: 'admin', password: '1234' }

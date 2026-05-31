@@ -1,57 +1,70 @@
-import sqlite3pkg from 'sqlite3';
-const sqlite3 = sqlite3pkg.verbose();
+import { Sequelize } from 'sequelize';
+import dotenv from 'dotenv';
+dotenv.config();
 
-const db = new sqlite3.Database('./bd.sqlite', (err) => {
-  if (err) {
-    console.error('Error al conectar:', err.message);
-  } else {
-    console.log('Conectado a SQLite.');
+const sequelize = new Sequelize(process.env.DATABASE_URL, {
+  dialect: 'postgres',
+  dialectOptions: {
+    ssl: {
+      require: true,
+      rejectUnauthorized: false
+    }
+  },
+  logging: false
+});
+
+// Modelo de Pelicula
+export const Pelicula = sequelize.define('Pelicula', {
+  titulo: {
+    type: Sequelize.STRING,
+    allowNull: false
+  },
+  director: {
+    type: Sequelize.STRING,
+    allowNull: false
+  },
+  anio: {
+    type: Sequelize.INTEGER,
+    allowNull: false
+  },
+  subgenero: {
+    type: Sequelize.STRING,
+    allowNull: false
+  },
+  sinopsis: {
+    type: Sequelize.TEXT
+  },
+  calificacion: {
+    type: Sequelize.FLOAT,
+    allowNull: false
+  },
+  pais: {
+    type: Sequelize.STRING,
+    allowNull: false
+  },
+  es_culto: {
+    type: Sequelize.INTEGER,
+    defaultValue: 0
   }
 });
 
-db.run(`
-  CREATE TABLE IF NOT EXISTS peliculas (
-    id           INTEGER PRIMARY KEY AUTOINCREMENT,
-    titulo       TEXT    NOT NULL,
-    director     TEXT    NOT NULL,
-    anio         INTEGER NOT NULL,
-    subgenero    TEXT    NOT NULL,
-    sinopsis     TEXT,
-    calificacion REAL    NOT NULL,
-    pais         TEXT    NOT NULL,
-    es_culto     INTEGER DEFAULT 0
-  )
-`, (err) => {
-  if (err) return console.error('Error al crear tabla:', err.message);
-  console.log('Tabla lista.');
-  insertarDatos();
-});
+// Sincronizar y poblar datos
+async function iniciarDB() {
+  try {
+    await sequelize.authenticate();
+    console.log('Conectado a PostgreSQL.');
+    await sequelize.sync({ force: false });
+    console.log('Tablas sincronizadas.');
 
-function insertarDatos() {
-  db.get('SELECT COUNT(*) as total FROM peliculas', (err, row) => {
-    if (err || row.total > 0) return;
-
-    const peliculas = [
-      ['El Resplandor',  'Stanley Kubrick', 1980, 'Psicológico',  'Un escritor enloquece en un hotel aislado.',       8.4, 'EEUU',     1],
-      ['Halloween',      'John Carpenter',  1978, 'Slasher',      'Michael Myers vuelve a su pueblo natal.',          7.7, 'EEUU',     1],
-      ['Hereditary',     'Ari Aster',       2018, 'Sobrenatural', 'Una familia descubre secretos sobre su linaje.',   7.3, 'EEUU',     0],
-      ['REC',            'Jaume Balagueró', 2007, 'Found Footage','Reportera atrapada en edificio en cuarentena.',    7.5, 'España',   1],
-      ['Nosferatu',      'F.W. Murnau',     1922, 'Gótico',       'Un agente conoce a un vampiro en Transilvania.',  7.9, 'Alemania', 1],
-      ['Get Out',        'Jordan Peele',    2017, 'Psicológico',  'Conspiración en la familia de su novia.',         7.7, 'EEUU',     0],
-      ['Alien',          'Ridley Scott',    1979, 'Sci-Fi Horror','Criatura alien caza a la tripulación de una nave.',8.5, 'EEUU',     1],
-      ['Midsommar',      'Ari Aster',       2019, 'Psicológico',  'Comunidad pagana con rituales oscuros en Suecia.',7.1, 'EEUU',     0],
-      ['Paranormal Activity','Oren Peli',   2007, 'Paranormal',   'Pareja documenta una presencia demoníaca.',       6.3, 'EEUU',     0],
-      ['Nosferatu 2024', 'Robert Eggers',   2024, 'Gótico',       'Remake del clásico vampírico de 1922.',           7.2, 'EEUU',     0],
-    ];
-
-    const stmt = db.prepare(`
-      INSERT INTO peliculas (titulo, director, anio, subgenero, sinopsis, calificacion, pais, es_culto)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    peliculas.forEach((p) => stmt.run(p));
-    stmt.finalize();
-    console.log('10 películas insertadas.');
-  });
-}
-
-export default db;
+    const total = await Pelicula.count();
+    if (total === 0) {
+      await Pelicula.bulkCreate([
+        { titulo: 'El Resplandor',   director: 'Stanley Kubrick', anio: 1980, subgenero: 'Psicológico',  sinopsis: 'Un escritor enloquece en un hotel aislado.',        calificacion: 8.4, pais: 'EEUU',     es_culto: 1 },
+        { titulo: 'Halloween',       director: 'John Carpenter',  anio: 1978, subgenero: 'Slasher',      sinopsis: 'Michael Myers vuelve a su pueblo natal.',           calificacion: 7.7, pais: 'EEUU',     es_culto: 1 },
+        { titulo: 'Hereditary',      director: 'Ari Aster',       anio: 2018, subgenero: 'Sobrenatural', sinopsis: 'Una familia descubre secretos sobre su linaje.',    calificacion: 7.3, pais: 'EEUU',     es_culto: 0 },
+        { titulo: 'REC',             director: 'Jaume Balagueró', anio: 2007, subgenero: 'Found Footage',sinopsis: 'Reportera atrapada en edificio en cuarentena.',     calificacion: 7.5, pais: 'España',   es_culto: 1 },
+        { titulo: 'Nosferatu',       director: 'F.W. Murnau',     anio: 1922, subgenero: 'Gótico',       sinopsis: 'Un agente conoce a un vampiro en Transilvania.',   calificacion: 7.9, pais: 'Alemania', es_culto: 1 },
+        { titulo: 'Get Out',         director: 'Jordan Peele',    anio: 2017, subgenero: 'Psicológico',  sinopsis: 'Conspiración en la familia de su novia.',          calificacion: 7.7, pais: 'EEUU',     es_culto: 0 },
+        { titulo: 'Alien',           director: 'Ridley Scott',    anio: 1979, subgenero: 'Sci-Fi Horror',sinopsis: 'Criatura alien caza a la tripulación de una nave.', calificacion: 8.5, pais: 'EEUU',     es_culto: 1 },
+        { titulo: 'Midsommar',       director: 'Ari Aster',       anio: 2019, subgenero: 'Psicológico',  sinopsis: 'Comunidad pagana con rituales oscuros en Suecia.', calificacion: 7.1, pais: 'EEUU',     es_culto: 0 },
+        { titulo: 'Paranormal Activity', director: 'Oren

@@ -1,6 +1,9 @@
 import express from 'express';
-import db from './db.js';
+import dotenv from 'dotenv';
+import { Pelicula } from './db.js';
 import { login, verificarToken } from './auth.js';
+
+dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -11,86 +14,80 @@ app.use(express.json());
 app.post('/login', login);
 
 // GET — protegida
-app.get('/peliculas', verificarToken, (req, res) => {
-  const { subgenero, es_culto } = req.query;
+app.get('/peliculas', verificarToken, async (req, res) => {
+  try {
+    const { subgenero, es_culto } = req.query;
+    const where = {};
 
-  let sql = 'SELECT * FROM peliculas';
-  const params = [];
-  const condiciones = [];
+    if (subgenero) where.subgenero = subgenero;
+    if (es_culto !== undefined) where.es_culto = Number(es_culto);
 
-  if (subgenero) {
-    condiciones.push('subgenero = ?');
-    params.push(subgenero);
+    const peliculas = await Pelicula.findAll({
+      where,
+      order: [['calificacion', 'DESC']]
+    });
+
+    res.json({ total: peliculas.length, peliculas });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
-
-  if (es_culto !== undefined) {
-    condiciones.push('es_culto = ?');
-    params.push(Number(es_culto));
-  }
-
-  if (condiciones.length > 0) {
-    sql += ' WHERE ' + condiciones.join(' AND ');
-  }
-
-  sql += ' ORDER BY calificacion DESC';
-
-  db.all(sql, params, (err, rows) => {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json({ total: rows.length, peliculas: rows });
-  });
 });
 
 // POST — protegida
-app.post('/peliculas', verificarToken, (req, res) => {
-  const { titulo, director, anio, subgenero, sinopsis, calificacion, pais, es_culto } = req.body;
+app.post('/peliculas', verificarToken, async (req, res) => {
+  try {
+    const { titulo, director, anio, subgenero, sinopsis, calificacion, pais, es_culto } = req.body;
 
-  if (!titulo || !director || !anio || !subgenero || !calificacion || !pais) {
-    return res.status(400).json({ error: 'Faltan campos obligatorios' });
+    if (!titulo || !director || !anio || !subgenero || !calificacion || !pais) {
+      return res.status(400).json({ error: 'Faltan campos obligatorios' });
+    }
+
+    const pelicula = await Pelicula.create({
+      titulo, director, anio, subgenero, sinopsis, calificacion, pais, es_culto: es_culto ?? 0
+    });
+
+    res.status(201).json({ mensaje: 'Película creada exitosamente', id: pelicula.id });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
-
-  const sql = `
-    INSERT INTO peliculas (titulo, director, anio, subgenero, sinopsis, calificacion, pais, es_culto)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `;
-
-  db.run(sql, [titulo, director, anio, subgenero, sinopsis, calificacion, pais, es_culto ?? 0], function(err) {
-    if (err) return res.status(500).json({ error: err.message });
-    res.status(201).json({ mensaje: 'Película creada exitosamente', id: this.lastID });
-  });
 });
 
 // PUT — protegida
-app.put('/peliculas/:id', verificarToken, (req, res) => {
-  const { id } = req.params;
-  const { titulo, director, anio, subgenero, sinopsis, calificacion, pais, es_culto } = req.body;
+app.put('/peliculas/:id', verificarToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { titulo, director, anio, subgenero, sinopsis, calificacion, pais, es_culto } = req.body;
 
-  if (!titulo || !director || !anio || !subgenero || !calificacion || !pais) {
-    return res.status(400).json({ error: 'Faltan campos obligatorios' });
-  }
+    if (!titulo || !director || !anio || !subgenero || !calificacion || !pais) {
+      return res.status(400).json({ error: 'Faltan campos obligatorios' });
+    }
 
-  const sql = `
-    UPDATE peliculas
-    SET titulo = ?, director = ?, anio = ?, subgenero = ?,
-        sinopsis = ?, calificacion = ?, pais = ?, es_culto = ?
-    WHERE id = ?
-  `;
+    const pelicula = await Pelicula.findByPk(id);
+    if (!pelicula) return res.status(404).json({ error: 'Película no encontrada' });
 
-  db.run(sql, [titulo, director, anio, subgenero, sinopsis, calificacion, pais, es_culto ?? 0, id], function(err) {
-    if (err) return res.status(500).json({ error: err.message });
-    if (this.changes === 0) return res.status(404).json({ error: 'Película no encontrada' });
+    await pelicula.update({
+      titulo, director, anio, subgenero, sinopsis, calificacion, pais, es_culto: es_culto ?? 0
+    });
+
     res.json({ mensaje: 'Película actualizada exitosamente', id: Number(id) });
-  });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // DELETE — protegida
-app.delete('/peliculas/:id', verificarToken, (req, res) => {
-  const { id } = req.params;
+app.delete('/peliculas/:id', verificarToken, async (req, res) => {
+  try {
+    const { id } = req.params;
 
-  db.run('DELETE FROM peliculas WHERE id = ?', [id], function(err) {
-    if (err) return res.status(500).json({ error: err.message });
-    if (this.changes === 0) return res.status(404).json({ error: 'Película no encontrada' });
+    const pelicula = await Pelicula.findByPk(id);
+    if (!pelicula) return res.status(404).json({ error: 'Película no encontrada' });
+
+    await pelicula.destroy();
     res.json({ mensaje: 'Película eliminada exitosamente', id: Number(id) });
-  });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 app.listen(PORT, () => {
