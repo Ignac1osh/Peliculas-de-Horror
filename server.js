@@ -3,7 +3,7 @@ import db from './db.js';
 import { login, verificarToken } from './auth.js';
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 
